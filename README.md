@@ -112,6 +112,8 @@ Evidence uses the `cultos.x402-seal.run.v1` schema and records:
 
 The file proves what the local verifier observed. A response hash becomes seller-backed cryptographic evidence only when a valid signed offer or receipt covers it.
 
+[Funded Base proof](evidence/cultos-http-header-audit.json) · [settlement](https://basescan.org/tx/0x81cdbc5602b99916d384a45be2384e86545673a4569186769f91ce625a661666)
+
 ## Development
 
 ```bash

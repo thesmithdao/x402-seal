@@ -1,0 +1,54 @@
+{
+  "schema": "cultos.x402-seal.run.v1",
+  "version": "0.1.0",
+  "createdAt": "2026-09-14T18:14:29.387Z",
+  "request": {
+    "url": "https://www.cultos.dev/services/http-header-audit",
+    "method": "POST",
+    "bodyHash": "eb6a2b902b4d8046998ac97ca34d4bde3ff7d24b929643ebac7be85d4dbc0c04",
+    "builderCode": "bc_c12702g2"
+  },
+  "gate": {
+    "x402Version": 2,
+    "resourceUrl": "https://www.cultos.dev/services/http-header-audit?path=http-header-audit",
+    "serviceName": "Cult OS Developer Tools",
+    "description": "HTTP Header Audit",
+    "scheme": "exact",
+    "network": "eip155:8453",
+    "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "amount": "1000",
+    "amountUsdc": "0.001",
+    "payTo": "0x14e7e2A736824f1D77b15A94835E6F9129354032",
+    "maxTimeoutSeconds": 60,
+    "extensions": [
+      "bazaar",
+      "builder-code",
+      "eip2612GasSponsoring",
+      "erc20ApprovalGasSponsoring"
+    ],
+    "appCode": "bc_rtkgzsuf"
+  },
+  "payer": "0xD1b1bc50Bf91672e6CDF6405B0881963D89b2887",
+  "maxUsdc": "0.001",
+  "settlement": {
+    "success": true,
+    "transaction": "0x81cdbc5602b99916d384a45be2384e86545673a4569186769f91ce625a661666",
+    "network": "eip155:8453",
+    "payer": "0xD1b1bc50Bf91672e6CDF6405B0881963D89b2887"
+  },
+  "delivery": {
+    "status": 200,
+    "contentType": "application/json",
+    "bytes": 431,
+    "bodyHash": "70f6145ac035f5f71749bb211f27aeea2a2107579286a30e88c10a2c0deb9799"
+  },
+  "attestation": {
+    "offers": 0,
+    "offerVerified": true,
+    "receiptPresent": false,
+    "receiptVerified": false,
+    "signerAuthorizationVerified": false
+  },
+  "verdict": "SEALED",
+  "integrity": "ae6392edb7d1bcf7b19a9af569db07de728899eeab65982e4904077624e61301"
+}
