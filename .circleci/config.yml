@@ -1,0 +1,29 @@
+version: 2.1
+
+jobs:
+  verify:
+    docker:
+      - image: cimg/node:20.20.2
+    resource_class: small
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm ci
+      - run:
+          name: Test
+          command: npm test
+      - run:
+          name: Typecheck
+          command: npm run typecheck
+      - run:
+          name: Build
+          command: npm run build
+      - run:
+          name: Inspect package
+          command: npm pack --dry-run
+
+workflows:
+  verify:
+    jobs:
+      - verify
