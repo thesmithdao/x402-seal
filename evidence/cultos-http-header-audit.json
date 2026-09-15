@@ -1,12 +1,12 @@
 {
   "schema": "cultos.x402-seal.run.v1",
-  "version": "0.1.0",
-  "createdAt": "2026-09-14T18:14:29.387Z",
+  "version": "0.1.1",
+  "createdAt": "2026-09-15T14:55:10.186Z",
   "request": {
     "url": "https://www.cultos.dev/services/http-header-audit",
     "method": "POST",
     "bodyHash": "eb6a2b902b4d8046998ac97ca34d4bde3ff7d24b929643ebac7be85d4dbc0c04",
-    "builderCode": "bc_c12702g2"
+    "builderCode": "bc_rtkgzsuf"
   },
   "gate": {
     "x402Version": 2,
@@ -18,7 +18,7 @@
     "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     "amount": "1000",
     "amountUsdc": "0.001",
-    "payTo": "0x14e7e2A736824f1D77b15A94835E6F9129354032",
+    "payTo": "0xBC560F09250d59F99c50A6B0b4EC982017AAa66a",
     "maxTimeoutSeconds": 60,
     "extensions": [
       "bazaar",
@@ -29,10 +29,11 @@
     "appCode": "bc_rtkgzsuf"
   },
   "payer": "0xD1b1bc50Bf91672e6CDF6405B0881963D89b2887",
+  "authorizationNonce": "0x13d7de3d49de845f50756a2fa2f55fc3d6a8d6003a083c399c2b23a7cd72c26e",
   "maxUsdc": "0.001",
   "settlement": {
     "success": true,
-    "transaction": "0x81cdbc5602b99916d384a45be2384e86545673a4569186769f91ce625a661666",
+    "transaction": "0x75ae0b320a9b54639cea8355ea52715991a5fdd190cb6736dc58bfddd5086265",
     "network": "eip155:8453",
     "payer": "0xD1b1bc50Bf91672e6CDF6405B0881963D89b2887"
   },
@@ -49,6 +50,18 @@
     "receiptVerified": false,
     "signerAuthorizationVerified": false
   },
+  "onchain": {
+    "verified": true,
+    "transferMatched": true,
+    "authorizationMatched": true,
+    "blockNumber": "51347383"
+  },
   "verdict": "SEALED",
-  "integrity": "ae6392edb7d1bcf7b19a9af569db07de728899eeab65982e4904077624e61301"
+  "proof": {
+    "scheme": "eip712",
+    "signer": "0xD1b1bc50Bf91672e6CDF6405B0881963D89b2887",
+    "digest": "4d65a14c1d8c02bf89be128584602d2efff2f1cb114119c068a1b14b7ec9b5db",
+    "signature": "0x6aa6f8012e02c4cbb8b6a026bc9d1131dd0b913751827239dc030cded1925a1234da279911fd110538e994fe1c69bcbe8817b87b6c85918ded3d953d9b63b07d1b"
+  },
+  "integrity": "4d65a14c1d8c02bf89be128584602d2efff2f1cb114119c068a1b14b7ec9b5db"
 }

@@ -115,6 +115,8 @@ Evidence uses the `cultos.x402-seal.run.v1` schema and records:
 
 The payer signature proves which wallet recorded the observation. The Base receipt independently proves settlement. A response hash becomes seller-backed evidence only when a valid signed offer or receipt covers it.
 
+A funded `0.1.1` example is available in [`evidence/cultos-http-header-audit.json`](evidence/cultos-http-header-audit.json), with its settlement visible on [BaseScan](https://basescan.org/tx/0x75ae0b320a9b54639cea8355ea52715991a5fdd190cb6736dc58bfddd5086265).
+
 ## Development
 
 ```bash
