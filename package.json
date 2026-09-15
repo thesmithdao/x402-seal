@@ -1,6 +1,6 @@
 {
   "name": "@cultos/x402-seal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Verify an x402 service through settlement and delivery.",
   "type": "module",
   "license": "MIT",

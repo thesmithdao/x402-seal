@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     return;
   }
   if (options.command === "version") {
-    process.stdout.write("0.1.0\n");
+    process.stdout.write("0.1.1\n");
     return;
   }
   if (!options.target) throw new SealError("REQUEST", "Target is required", exitCodes.REQUEST);

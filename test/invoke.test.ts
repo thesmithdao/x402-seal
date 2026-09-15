@@ -8,7 +8,7 @@ import { invoke } from "../src/index.js";
 import { challenge, delivery, fixture } from "./helpers.js";
 
 describe("paid lifecycle", () => {
-  it("signs once, pays once, and seals useful delivery", async () => {
+  it("creates one payment authorization, signs evidence, and seals verified delivery", async () => {
     const paymentRequired = await fixture();
     const account = privateKeyToAccount(`0x${"1".repeat(64)}`);
     let signatures = 0;
@@ -36,10 +36,11 @@ describe("paid lifecycle", () => {
       confirm: async () => true,
       output: join(directory, "evidence.json"),
       fetcher: fetcher as typeof fetch,
+      onchainVerifier: async () => ({ verified: true, blockNumber: "1", transferMatched: true, authorizationMatched: true }),
     });
     expect(result.evidence.verdict).toBe("SEALED");
     expect(calls).toHaveLength(2);
-    expect(signatures).toBe(1);
+    expect(signatures).toBe(2);
     expect(calls[0]?.headers.get("X-Builder-Code")).toBe("bc_buyer");
     expect(calls[1]?.headers.get("X-Builder-Code")).toBe("bc_buyer");
     const header = calls[1]?.headers.get("PAYMENT-SIGNATURE");
@@ -47,6 +48,28 @@ describe("paid lifecycle", () => {
     const payload = decodePaymentSignatureHeader(header!);
     expect((payload.extensions?.["builder-code"] as { info: { s: string[] } }).info.s).toContain("bc_buyer");
     expect(payload.extensions?.["payment-identifier"]).toBeTruthy();
+  });
+
+  it("refuses a server-declared settlement without a matching Base transfer", async () => {
+    const paymentRequired = await fixture();
+    const account = privateKeyToAccount(`0x${"5".repeat(64)}`);
+    let calls = 0;
+    const fetcher = async () => {
+      calls += 1;
+      return calls === 1 ? challenge(paymentRequired) : delivery({ payer: account.address });
+    };
+    const directory = await mkdtemp(join(tmpdir(), "x402-seal-fake-settlement-"));
+    const result = await invoke({
+      url: paymentRequired.resource.url,
+      maxUsdc: "0.001",
+      getSigner: () => account,
+      confirm: async () => true,
+      output: join(directory, "evidence.json"),
+      fetcher: fetcher as typeof fetch,
+      onchainVerifier: async () => ({ verified: false, transferMatched: false, reason: "Matching USDC transfer not found" }),
+    });
+    expect(result.evidence.verdict).toBe("REFUSED");
+    expect(result.evidence.boundary).toBe("SETTLEMENT");
   });
 
   it("does not sign or pay after cancellation", async () => {

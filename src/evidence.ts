@@ -1,7 +1,8 @@
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { lstat, mkdir, open, readFile } from "node:fs/promises";
-import { isAddress } from "viem";
+import type { ClientEvmSigner } from "@x402/evm";
+import { getAddress, isAddress, verifyTypedData } from "viem";
 import { BASE_NETWORK, BASE_USDC, formatUsdc, parseUsdc } from "./challenge.js";
 import { sha256 } from "./request.js";
 import { verifyStoredAttestations } from "./attestation.js";
@@ -9,8 +10,22 @@ import { SealError, exitCodes, type Evidence } from "./types.js";
 
 const evidenceLimit = 262_144;
 
-export async function writeEvidence(evidence: Omit<Evidence, "integrity">, output?: string): Promise<{ evidence: Evidence; path: string }> {
-  const complete: Evidence = { ...evidence, integrity: digestEvidence(evidence) };
+const proofDomain = { name: "x402-seal", version: "1", chainId: 8453 } as const;
+const proofTypes = { X402SealEvidence: [{ name: "digest", type: "bytes32" }] } as const;
+
+export async function writeEvidence(evidence: Omit<Evidence, "integrity" | "proof">, signer: ClientEvmSigner, output?: string): Promise<{ evidence: Evidence; path: string }> {
+  const integrity = digestEvidence(evidence);
+  const signature = await signer.signTypedData({
+    domain: proofDomain,
+    types: proofTypes,
+    primaryType: "X402SealEvidence",
+    message: { digest: `0x${integrity}` },
+  });
+  const complete: Evidence = {
+    ...evidence,
+    proof: { scheme: "eip712", signer: signer.address, digest: integrity, signature },
+    integrity,
+  };
   const path = output ? resolve(output) : await defaultEvidencePath(evidence.createdAt);
   await ensureDirectory(dirname(path));
   const handle = await open(path, "wx", 0o600);
@@ -36,7 +51,7 @@ export async function readEvidence(path: string): Promise<Evidence> {
   if (!isEvidence(value)) {
     throw new SealError("REQUEST", "Evidence schema is invalid", exitCodes.REQUEST);
   }
-  const { integrity, ...unsigned } = value;
+  const { integrity, proof, ...unsigned } = value;
   if (digestEvidence(unsigned) !== integrity) {
     throw new SealError("REQUEST", "Evidence integrity check failed", exitCodes.REQUEST);
   }
@@ -48,6 +63,19 @@ export async function readEvidence(path: string): Promise<Evidence> {
   }
   if (value.attestation && !await verifyStoredAttestations(value.attestation)) {
     throw new SealError("REQUEST", "Stored attestation signature is invalid", exitCodes.REQUEST);
+  }
+  const proofValid = proof.digest === integrity
+    && getAddress(proof.signer) === getAddress(value.payer)
+    && await verifyTypedData({
+      address: getAddress(proof.signer),
+      domain: proofDomain,
+      types: proofTypes,
+      primaryType: "X402SealEvidence",
+      message: { digest: `0x${integrity}` },
+      signature: proof.signature as `0x${string}`,
+    }).catch(() => false);
+  if (!proofValid) {
+    throw new SealError("REQUEST", "Evidence signature is invalid", exitCodes.REQUEST);
   }
   return value;
 }
@@ -92,9 +120,15 @@ function isEvidence(value: unknown): value is Evidence {
   if (item.schema !== "cultos.x402-seal.run.v1") return false;
   if (typeof item.version !== "string" || typeof item.createdAt !== "string") return false;
   if (typeof item.integrity !== "string" || !/^[0-9a-f]{64}$/.test(item.integrity)) return false;
+  if (!item.proof || typeof item.proof !== "object" || Array.isArray(item.proof)) return false;
+  const proof = item.proof as Record<string, unknown>;
+  if (proof.scheme !== "eip712" || typeof proof.signer !== "string" || !isAddress(proof.signer)) return false;
+  if (typeof proof.digest !== "string" || !/^[0-9a-f]{64}$/.test(proof.digest)) return false;
+  if (typeof proof.signature !== "string" || !/^0x[0-9a-fA-F]{130}$/.test(proof.signature)) return false;
   if (!item.request || typeof item.request !== "object" || Array.isArray(item.request)) return false;
   if (!item.gate || typeof item.gate !== "object" || Array.isArray(item.gate)) return false;
   if (typeof item.payer !== "string" || typeof item.maxUsdc !== "string") return false;
+  if (typeof item.authorizationNonce !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(item.authorizationNonce)) return false;
   return item.verdict === "SEALED" || item.verdict === "PENDING" || item.verdict === "REFUSED" || item.verdict === "UNKNOWN";
 }
 
@@ -110,6 +144,7 @@ function validateConsistency(evidence: Evidence): void {
   if (!isAddress(evidence.payer)) invalid();
   if (evidence.verdict === "SEALED") {
     if (!evidence.settlement?.success || !evidence.delivery) invalid();
+    if (!evidence.onchain?.verified || evidence.onchain.transferMatched !== true || evidence.onchain.authorizationMatched !== true) invalid();
     if (evidence.delivery.status < 200 || evidence.delivery.status >= 300 || evidence.delivery.status === 202) invalid();
     if (evidence.delivery.bytes <= 0 || !/^[0-9a-f]{64}$/.test(evidence.delivery.bodyHash)) invalid();
     if (evidence.delivery.contentType !== "application/json" && !evidence.delivery.contentType.endsWith("+json")) invalid();
@@ -120,7 +155,7 @@ function validateConsistency(evidence: Evidence): void {
     if (evidence.settlement.payer && evidence.settlement.payer.toLowerCase() !== evidence.payer.toLowerCase()) invalid();
     if (evidence.settlement.amount && evidence.settlement.amount !== evidence.gate.amount) invalid();
   }
-  if (evidence.onchain?.verified && evidence.onchain.transferMatched !== true) invalid();
+  if (evidence.onchain?.verified && (evidence.onchain.transferMatched !== true || evidence.onchain.authorizationMatched !== true)) invalid();
 }
 
 function invalid(): never {

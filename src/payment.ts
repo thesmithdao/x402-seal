@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import type { PaymentPayload, PaymentRequired, PaymentRequirements } from "@x402/core/types";
-import { ExactEvmScheme, type ClientEvmSigner } from "@x402/evm";
+import { ExactEvmScheme, isEIP3009Payload, type ClientEvmSigner, type ExactEvmPayloadV2 } from "@x402/evm";
 import { BuilderCodeClientExtension } from "@x402/extensions/builder-code";
 import { appendPaymentIdentifierToExtensions } from "@x402/extensions/payment-identifier";
 import { sameRequirement } from "./challenge.js";
@@ -11,6 +11,7 @@ export interface PaymentMaterial {
   headers: Record<string, string>;
   payload: PaymentPayload;
   payer: string;
+  authorizationNonce: string;
   httpClient: x402HTTPClient;
 }
 
@@ -43,10 +44,15 @@ export async function createPayment(
   if (!sameRequirement(payload.accepted, selected)) {
     throw new SealError("POLICY", "Signed payment terms do not match the quote", exitCodes.POLICY);
   }
+  const exactPayload = payload.payload as ExactEvmPayloadV2;
+  if (!isEIP3009Payload(exactPayload)) {
+    throw new SealError("POLICY", "Payment authorization is not EIP-3009", exitCodes.POLICY);
+  }
   return {
     headers: httpClient.encodePaymentSignatureHeader(payload),
     payload,
     payer: signer.address,
+    authorizationNonce: exactPayload.authorization.nonce,
     httpClient,
   };
 }

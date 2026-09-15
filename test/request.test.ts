@@ -43,4 +43,15 @@ describe("request boundary", () => {
     const fetcher = async () => new Response(new Uint8Array(1_048_577), { status: 200 });
     await expect(requestOnce(request, {}, fetcher as typeof fetch)).rejects.toThrow("Response body exceeds 1 MiB");
   });
+
+  it("keeps the deadline active while reading the response body", async () => {
+    const request = { ...await prepareRequest({ url: "https://example.com/service" }), timeoutMs: 20 };
+    const fetcher = async (_input: RequestInfo | URL, init?: RequestInit) => new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("{"));
+        init?.signal?.addEventListener("abort", () => controller.error(new DOMException("Aborted", "AbortError")));
+      },
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    await expect(requestOnce(request, {}, fetcher as typeof fetch)).rejects.toThrow("Request timed out");
+  });
 });

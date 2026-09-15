@@ -55,6 +55,7 @@ export interface OnchainRecord {
   verified: boolean;
   blockNumber?: string;
   transferMatched?: boolean;
+  authorizationMatched?: boolean;
   reason?: string;
 }
 
@@ -65,6 +66,13 @@ export interface SettlementRecord {
   payer?: string;
   amount?: string;
   errorReason?: string;
+}
+
+export interface EvidenceProof {
+  scheme: "eip712";
+  signer: string;
+  digest: string;
+  signature: string;
 }
 
 export interface AttestationRecord {
@@ -89,6 +97,7 @@ export interface Evidence {
   };
   gate: GateRecord;
   payer: string;
+  authorizationNonce: string;
   maxUsdc: string;
   settlement?: SettlementRecord;
   delivery?: {
@@ -102,6 +111,7 @@ export interface Evidence {
   verdict: Verdict;
   boundary?: Boundary;
   reason?: string;
+  proof: EvidenceProof;
   integrity: string;
 }
 

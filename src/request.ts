@@ -89,22 +89,23 @@ export async function requestOnce(
       redirect: "manual",
       signal: controller.signal,
     });
+    if (response.status >= 300 && response.status < 400) {
+      throw new SealError("POLICY", "Redirects are not allowed", exitCodes.POLICY);
+    }
+    const paymentRequired = response.headers.get("PAYMENT-REQUIRED") ?? response.headers.get("X-PAYMENT-REQUIRED");
+    const paymentResponse = response.headers.get("PAYMENT-RESPONSE") ?? response.headers.get("X-PAYMENT-RESPONSE");
+    if ((paymentRequired?.length ?? 0) > requestLimit || (paymentResponse?.length ?? 0) > requestLimit) {
+      throw new SealError("CHALLENGE", "Payment header exceeds 64 KiB", exitCodes.CHALLENGE);
+    }
+    const body = await readBody(response, responseLimit);
+    return { status: response.status, url: response.url || spec.url, headers: response.headers, body };
   } catch (error) {
+    if (error instanceof SealError) throw error;
     const message = error instanceof Error && error.name === "AbortError" ? "Request timed out" : "Request failed";
     throw new SealError("UNKNOWN", message, exitCodes.UNKNOWN);
   } finally {
     clearTimeout(timer);
   }
-  if (response.status >= 300 && response.status < 400) {
-    throw new SealError("POLICY", "Redirects are not allowed", exitCodes.POLICY);
-  }
-  const paymentRequired = response.headers.get("PAYMENT-REQUIRED") ?? response.headers.get("X-PAYMENT-REQUIRED");
-  const paymentResponse = response.headers.get("PAYMENT-RESPONSE") ?? response.headers.get("X-PAYMENT-RESPONSE");
-  if ((paymentRequired?.length ?? 0) > requestLimit || (paymentResponse?.length ?? 0) > requestLimit) {
-    throw new SealError("CHALLENGE", "Payment header exceeds 64 KiB", exitCodes.CHALLENGE);
-  }
-  const body = await readBody(response, responseLimit);
-  return { status: response.status, url: response.url || spec.url, headers: response.headers, body };
 }
 
 export function sha256(value: string | Uint8Array): string {

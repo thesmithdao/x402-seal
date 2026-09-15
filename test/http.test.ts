@@ -50,6 +50,7 @@ it("runs the paid lifecycle over local HTTP", async () => {
       getSigner: () => account,
       confirm: async () => true,
       output: join(directory, "evidence.json"),
+      onchainVerifier: async () => ({ verified: true, blockNumber: "1", transferMatched: true, authorizationMatched: true }),
     });
     expect(result.evidence.verdict).toBe("SEALED");
     expect(paidCalls).toBe(1);

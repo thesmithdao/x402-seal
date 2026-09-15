@@ -3,7 +3,7 @@ import type { SettleResponse } from "@x402/core/types";
 import { inspectAttestations, inspectOffers } from "./attestation.js";
 import { parseGate, parseUsdc } from "./challenge.js";
 import { readEvidence, writeEvidence } from "./evidence.js";
-import { verifyOnchain } from "./onchain.js";
+import { DEFAULT_BASE_RPC, verifyOnchain } from "./onchain.js";
 import { createPayment } from "./payment.js";
 import { prepareRequest, requestOnce, sha256, type RequestOptions } from "./request.js";
 import { SealError, exitCodes, type Evidence, type GateResult, type RunResult } from "./types.js";
@@ -19,6 +19,7 @@ export interface InvokeOptions extends RequestOptions {
   rpcUrl?: string;
   output?: string;
   fetcher?: typeof fetch;
+  onchainVerifier?: typeof verifyOnchain;
 }
 
 export async function gate(options: GateOptions): Promise<GateResult> {
@@ -47,34 +48,35 @@ export async function invoke(options: InvokeOptions): Promise<RunResult> {
     signer,
     request.builderCode,
   );
-  const base = baseEvidence(request, gateResult, material.payer, options.maxUsdc);
+  const base = baseEvidence(request, gateResult, material.payer, material.authorizationNonce, options.maxUsdc);
   let paid;
   try {
     paid = await requestOnce(request, material.headers, options.fetcher ?? fetch);
   } catch (error) {
     const reason = error instanceof Error ? error.message : "Paid request result is unknown";
-    return persist({ ...base, verdict: "UNKNOWN", boundary: "UNKNOWN", reason }, options.output);
+    return persist({ ...base, verdict: "UNKNOWN", boundary: "UNKNOWN", reason }, signer, options.output);
   }
   let settlement;
   try {
     settlement = material.httpClient.getPaymentSettleResponse(name => paid.headers.get(name));
   } catch {
-    return persist({ ...base, verdict: "UNKNOWN", boundary: "UNKNOWN", reason: "Settlement response is missing or invalid" }, options.output);
+    return persist({ ...base, verdict: "UNKNOWN", boundary: "UNKNOWN", reason: "Settlement response is missing or invalid" }, signer, options.output);
   }
   const settlementProblem = validateSettlement(settlement, material.payer, gateResult.selected.amount);
   const settlementRecord = recordSettlement(settlement);
   if (settlementProblem) {
-    return persist({ ...base, settlement: settlementRecord, verdict: "REFUSED", boundary: "SETTLEMENT", reason: settlementProblem }, options.output);
+    return persist({ ...base, settlement: settlementRecord, verdict: "REFUSED", boundary: "SETTLEMENT", reason: settlementProblem }, signer, options.output);
   }
   const response = new Response(null, { status: paid.status, headers: paid.headers });
   let attestation;
   try {
     attestation = await inspectAttestations(gateResult.paymentRequired, gateResult.selected, response, material.payer);
   } catch {
-    return persist({ ...base, settlement: settlementRecord, verdict: "UNKNOWN", boundary: "UNKNOWN", reason: "Attestation response could not be verified" }, options.output);
+    return persist({ ...base, settlement: settlementRecord, verdict: "UNKNOWN", boundary: "UNKNOWN", reason: "Attestation response could not be verified" }, signer, options.output);
   }
-  const onchain = options.rpcUrl ? await verifyOnchain(settlementRecord, gateResult.record, material.payer, options.rpcUrl) : undefined;
-  if (onchain && !onchain.verified) {
+  const onchainVerifier = options.onchainVerifier ?? verifyOnchain;
+  const onchain = await onchainVerifier(settlementRecord, gateResult.record, material.payer, material.authorizationNonce, options.rpcUrl ?? DEFAULT_BASE_RPC);
+  if (!onchain.verified) {
     const boundary = onchain.transferMatched === false ? "SETTLEMENT" : "UNKNOWN";
     return persist({
       ...base,
@@ -84,29 +86,30 @@ export async function invoke(options: InvokeOptions): Promise<RunResult> {
       verdict: boundary === "UNKNOWN" ? "UNKNOWN" : "REFUSED",
       boundary,
       reason: onchain.reason ?? "Onchain verification failed",
-    }, options.output);
+    }, signer, options.output);
   }
   const delivery = deliveryRecord(paid);
   if (paid.status === 202) {
-    return persist({ ...base, settlement: settlementRecord, delivery, attestation, ...(onchain ? { onchain } : {}), verdict: "PENDING", boundary: "DELIVERY", reason: "Delivery is asynchronous" }, options.output);
+    return persist({ ...base, settlement: settlementRecord, delivery, attestation, onchain, verdict: "PENDING", boundary: "DELIVERY", reason: "Delivery is asynchronous" }, signer, options.output);
   }
   const deliveryProblem = validateDelivery(paid, delivery);
   if (deliveryProblem) {
-    return persist({ ...base, settlement: settlementRecord, delivery, attestation, ...(onchain ? { onchain } : {}), verdict: "REFUSED", boundary: "DELIVERY", reason: deliveryProblem }, options.output);
+    return persist({ ...base, settlement: settlementRecord, delivery, attestation, onchain, verdict: "REFUSED", boundary: "DELIVERY", reason: deliveryProblem }, signer, options.output);
   }
   if (attestation.receiptPresent && !attestation.receiptVerified) {
-    return persist({ ...base, settlement: settlementRecord, delivery, attestation, ...(onchain ? { onchain } : {}), verdict: "REFUSED", boundary: "DELIVERY", reason: "Signed receipt could not be verified" }, options.output);
+    return persist({ ...base, settlement: settlementRecord, delivery, attestation, onchain, verdict: "REFUSED", boundary: "DELIVERY", reason: "Signed receipt could not be verified" }, signer, options.output);
   }
-  return persist({ ...base, settlement: settlementRecord, delivery, attestation, ...(onchain ? { onchain } : {}), verdict: "SEALED" }, options.output);
+  return persist({ ...base, settlement: settlementRecord, delivery, attestation, onchain, verdict: "SEALED" }, signer, options.output);
 }
 
 export async function witness(path: string, rpcUrl?: string): Promise<Evidence> {
   const evidence = await readEvidence(path);
-  if (rpcUrl && evidence.settlement) {
-    const result = await verifyOnchain(evidence.settlement, evidence.gate, evidence.payer, rpcUrl);
+  if (evidence.verdict === "SEALED" && evidence.settlement) {
+    const result = await verifyOnchain(evidence.settlement, evidence.gate, evidence.payer, evidence.authorizationNonce, rpcUrl ?? DEFAULT_BASE_RPC);
     if (!result.verified) {
       throw new SealError(result.transferMatched === false ? "SETTLEMENT" : "UNKNOWN", result.reason ?? "Onchain verification failed", result.transferMatched === false ? exitCodes.SETTLEMENT : exitCodes.UNKNOWN);
     }
+    return { ...evidence, onchain: result };
   }
   return evidence;
 }
@@ -115,11 +118,12 @@ function baseEvidence(
   request: Awaited<ReturnType<typeof prepareRequest>>,
   gateResult: GateResult,
   payer: string,
+  authorizationNonce: string,
   maxUsdc: string,
-): Omit<Evidence, "integrity" | "verdict"> {
+): Omit<Evidence, "integrity" | "proof" | "verdict"> {
   return {
     schema: "cultos.x402-seal.run.v1",
-    version: "0.1.0",
+    version: "0.1.1",
     createdAt: new Date().toISOString(),
     request: {
       url: request.url,
@@ -129,12 +133,13 @@ function baseEvidence(
     },
     gate: gateResult.record,
     payer,
+    authorizationNonce,
     maxUsdc,
   };
 }
 
-async function persist(evidence: Omit<Evidence, "integrity">, output?: string): Promise<RunResult> {
-  return writeEvidence(evidence, output);
+async function persist(evidence: Omit<Evidence, "integrity" | "proof">, signer: ClientEvmSigner, output?: string): Promise<RunResult> {
+  return writeEvidence(evidence, signer, output);
 }
 
 function validateSettlement(settlement: SettleResponse, payer: string, amount: string): string | undefined {
